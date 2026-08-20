@@ -59,5 +59,20 @@ class Angle:
         return np.cos(self.rad)
 
     def __repr__(self):
-        return f"Angle({self.deg}°)"
+        return f"Angle({self.deg:.2f}°)"
 
+    def is_between(self, low_bound: 'Angle', high_bound: 'Angle'):
+        s = low_bound.rad
+        e = high_bound.rad
+        a = self.rad
+
+        # shift interval to [0, 2pi]
+        s_mod = (s + 2*np.pi) % (2*np.pi)
+        e_mod = (e + 2*np.pi) % (2*np.pi)
+        a_mod = (a + 2*np.pi) % (2*np.pi)
+
+        if s_mod <= e_mod:
+            return s_mod <= a_mod <= e_mod
+        else:
+            # interval wraps around 2pi
+            return a_mod >= s_mod or a_mod <= e_mod

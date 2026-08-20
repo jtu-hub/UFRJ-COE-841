@@ -1,7 +1,7 @@
 from angle import *
 
 class Pose:
-    def __init__(self, x, y, th: float | Degrees | Radians | Angle, name: str = 'Robot'):
+    def __init__(self, x, y, th: float | Degrees | Radians | Angle):
         self.x = x
         self.y = y
 
@@ -12,5 +12,12 @@ class Pose:
         else:
             self.th = Angle(th)
 
+    def __add__(self, other):
+        return Pose(
+            self.x + other.x, 
+            self.y + other.y, 
+            self.th + other.th
+        )
+    
     def __repr__(self):
-            return f"Pose({self.x}, {self.y}, {self.th})"
+            return f"Pose({self.x:.2f}, {self.y:.2f}, {self.th})"
