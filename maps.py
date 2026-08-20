@@ -9,17 +9,19 @@ class Landmark:
         self.pos = pos
         self.signture = signature
 
-    def draw(self, ax: plt.Axes, color: str = 'red'):
-        ax.scatter(self.pos.x, self.pos.y, c=color)
+    def draw(self, ax: plt.Axes, color: str = 'red', set_label = False):
+        ax.scatter(self.pos.x, self.pos.y, c=color, label = f"Landmark {self.signture}" if set_label else None)
 
 class Map: pass
 
 class LandmarkMap(Map):
-    def __init__(self, landmarks: list[Landmark] = []):
+    def __init__(self, landmarks: list[Landmark] = [], x_lims: list[float, float] = [-5, 5], y_lims: list[float, float] = [-5, 5]):
         super().__init__()
         
         self.landmarks = landmarks
         self.colors = []
+        self.x_lims = x_lims
+        self.y_lims = y_lims        
 
         self._generateLandmarkColors()
 
@@ -43,7 +45,10 @@ class LandmarkMap(Map):
             self.colors.append(hex_color)
 
 
-    def draw(self, ax: plt.Axes):
+    def draw(self, ax: plt.Axes, landmark_labels: bool = False):
         for l_idx, l in enumerate(self.landmarks):
-            l.draw(ax, color = self.colors[l_idx])
+            l.draw(ax, color = self.colors[l_idx], set_label=landmark_labels)
+
+        ax.set_xlim(self.x_lims[0], self.x_lims[1])
+        ax.set_ylim(self.y_lims[0], self.y_lims[1])
 
