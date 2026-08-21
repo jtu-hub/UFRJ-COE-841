@@ -81,7 +81,7 @@ class Camera:
                 if is_in_fov:
                     correspondences.append(c)
                     detected_landmarks.append(
-                        self.readingToRobotFrame(DetectedFeature(r, phi, l.signture))
+                        self.readingToRobotFrame(DetectedFeature(r, phi, l.signature))
                     )
         
             self.reading = {

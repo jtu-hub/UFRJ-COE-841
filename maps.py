@@ -7,17 +7,20 @@ from pose import Pose
 class Landmark:
     def __init__(self, pos: Pose, signature: any):
         self.pos = pos
-        self.signture = signature
+        self.signature = signature
 
     def draw(self, ax: plt.Axes, color: str = 'red', set_label = False):
-        ax.scatter(self.pos.x, self.pos.y, c=color, label = f"Landmark {self.signture}" if set_label else None)
+        ax.scatter(self.pos.x, self.pos.y, c=color, label = f"Landmark {self.signature}" if set_label else None)
 
 class Map: pass
 
 class LandmarkMap(Map):
-    def __init__(self, landmarks: list[Landmark] = [], x_lims: list[float, float] = [-5, 5], y_lims: list[float, float] = [-5, 5]):
+    def __init__(self, landmarks: list[Landmark] | None = None, x_lims: tuple[float, float] = (-5, 5), y_lims: tuple[float, float] = (-5, 5)):
         super().__init__()
-        
+
+        if landmarks is None:
+            landmarks = []
+
         self.landmarks = landmarks
         self.colors = []
         self.x_lims = x_lims
@@ -34,11 +37,11 @@ class LandmarkMap(Map):
 
         for i in range(n):
             
-            hue = (i + 1) / n;
-            saturation = (90 + np.random.rand() * 10) / 100;
-            lightness = (50 + np.random.rand() * 10) / 100;
+            hue = (i + 1) / n
+            saturation = (90 + np.random.rand() * 10) / 100
+            value = (50 + np.random.rand() * 10) / 100 # lightness
 
-            rgb = colorsys.hsv_to_rgb(hue, saturation, lightness)
+            rgb = colorsys.hsv_to_rgb(hue, saturation, value)
 
             hex_color = f"#{int(rgb[0] * 255):02x}{int(rgb[1] * 255):02x}{int(rgb[2] * 255):02x}"
 
