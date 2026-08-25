@@ -55,3 +55,53 @@ class LandmarkMap(Map):
         ax.set_xlim(self.x_lims[0], self.x_lims[1])
         ax.set_ylim(self.y_lims[0], self.y_lims[1])
 
+
+class Segment:
+    def __init__(self, p1: tuple[float, float], p2: tuple[float, float]):
+        self.p1 = p1
+        self.p2 = p2
+
+    def draw(self, ax: plt.Axes, color: str = 'black',
+             linestyle: str = '-', linewidth: float = 1):
+        ax.plot(
+            [self.p1[0], self.p2[0]],
+            [self.p1[1], self.p2[1]],
+            color=color,
+            linestyle=linestyle,
+            linewidth=linewidth
+        )
+
+
+class ObstacleMap(Map):
+    def __init__(
+        self,
+        segments: list[Segment] | None = None,
+        x_lims: tuple[float, float] = (-5, 5),
+        y_lims: tuple[float, float] = (-5, 5)
+    ):
+        super().__init__()
+
+        if segments is None:
+            segments = []
+
+        self.segments = segments
+        self.x_lims = x_lims
+        self.y_lims = y_lims
+
+    def draw(
+        self,
+        ax: plt.Axes,
+        color: str = 'black',
+        linestyle: str = '-',
+        linewidth: float = 1
+    ):
+        for segment in self.segments:
+            segment.draw(
+                ax,
+                color=color,
+                linestyle=linestyle,
+                linewidth=linewidth
+            )
+
+        ax.set_xlim(self.x_lims[0], self.x_lims[1])
+        ax.set_ylim(self.y_lims[0], self.y_lims[1])
