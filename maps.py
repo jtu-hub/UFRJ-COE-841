@@ -221,3 +221,113 @@ class ObstacleMap(Map):
             self.y_lims[0],
             self.y_lims[1]
         )
+
+
+class DistanceField:
+
+    def __init__(
+        self,
+        obstacle_map,
+        resolution=0.05
+    ):
+        self.obstacle_map = obstacle_map
+        self.resolution = resolution
+
+        self.x_min, self.x_max = obstacle_map.x_lims
+        self.y_min, self.y_max = obstacle_map.y_lims
+
+        self.nx = int(
+            np.ceil(
+                (self.x_max - self.x_min)
+                / resolution
+            )
+        ) + 1
+
+        self.ny = int(
+            np.ceil(
+                (self.y_max - self.y_min)
+                / resolution
+            )
+        ) + 1
+
+        self.distances = np.zeros(
+            (self.ny, self.nx)
+        )
+
+        self.build()
+
+    def world_to_grid(self, x, y):
+
+        ix = int(
+            np.round(
+                (x - self.x_min)
+                / self.resolution
+            )
+        )
+
+        iy = int(
+            np.round(
+                (y - self.y_min)
+                / self.resolution
+            )
+        )
+
+        return ix, iy
+
+    def grid_to_world(self, ix, iy):
+
+        x = (
+            self.x_min
+            + ix * self.resolution
+        )
+
+        y = (
+            self.y_min
+            + iy * self.resolution
+        )
+
+        return x, y
+
+    def build(self):
+
+        for iy in range(self.ny):
+
+            for ix in range(self.nx):
+
+                x, y = self.grid_to_world(
+                    ix,
+                    iy
+                )
+
+                self.distances[iy, ix] = (
+                    self.obstacle_map
+                    .distance_to_nearest_obstacle(x, y)
+                )
+
+    def distance_at(self, x, y):
+
+        ix, iy = self.world_to_grid(x, y)
+
+        if (
+            ix < 0
+            or ix >= self.nx
+            or iy < 0
+            or iy >= self.ny
+        ):
+            return np.inf
+
+        return self.distances[iy, ix]
+
+    def draw(self, ax):
+
+        ax.imshow(
+            self.distances,
+            origin="lower",
+            extent=[
+                self.x_min,
+                self.x_max,
+                self.y_min,
+                self.y_max
+            ],
+            aspect="equal"
+        )
