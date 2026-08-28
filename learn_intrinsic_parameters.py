@@ -115,19 +115,11 @@ def generate_synthetic_dataset(
 
     For each pose and each beam:
 
-        pose + map
-            |
-            v
-        ray casting
-            |
-            v
-          z_hat
-            |
-            v
-      choose component
-            |
-            v
-        generate z
+        1 - pose + map
+        2 - ray casting
+        3 - z_hat
+        4 - choose component
+        5 - generate z
 
     Returns
     -------
@@ -183,10 +175,7 @@ def generate_synthetic_dataset(
 
         for beam_angle in beam_angles:
 
-            # ------------------------------------------------
             # Expected measurement
-            # ------------------------------------------------
-
             z_hat = ray_cast(
                 (pose.x, pose.y),
                 pose.th.rad + beam_angle,
@@ -196,19 +185,13 @@ def generate_synthetic_dataset(
 
             scan_expected.append(z_hat)
 
-            # ------------------------------------------------
             # Select the component that generates the reading
-            # ------------------------------------------------
-
             component = rng.choice(
                 component_names,
                 p=weights
             )
 
-            # ------------------------------------------------
             # Generate measurement
-            # ------------------------------------------------
-
             if component == "hit":
 
                 z = z_hat + rng.normal(
@@ -251,10 +234,7 @@ def generate_synthetic_dataset(
     return scans, expected, components
 
 
-# ============================================================
 # E-step
-# ============================================================
-
 def beam_responsibilities(
     z,
     z_hat,
@@ -280,10 +260,7 @@ def beam_responsibilities(
     corresponding component.
     """
 
-    # --------------------------------------------------------
     # Weighted likelihood of each component
-    # --------------------------------------------------------
-
     likelihood_hit = (
         z_hit
         * p_hit(
@@ -318,10 +295,7 @@ def beam_responsibilities(
         )
     )
 
-    # --------------------------------------------------------
     # Total likelihood
-    # --------------------------------------------------------
-
     total = (
         likelihood_hit
         + likelihood_short
@@ -339,10 +313,7 @@ def beam_responsibilities(
             0.0
         )
 
-    # --------------------------------------------------------
     # Responsibilities
-    # --------------------------------------------------------
-
     return (
         likelihood_hit / total,
         likelihood_short / total,
@@ -377,14 +348,10 @@ def update_parameters(
     """
 
     n = len(z_values)
-
     if n == 0:
         raise ValueError("Dataset vazio.")
 
-    # ========================================================
     # Effective number of observations assigned to each model
-    # ========================================================
-
     hit_weight = sum(
         r[0] for r in responsibilities
     )
@@ -401,19 +368,13 @@ def update_parameters(
         r[3] for r in responsibilities
     )
 
-    # ========================================================
     # Mixture weights
-    # ========================================================
-
     z_hit = hit_weight / n
     z_short = short_weight / n
     z_max_weight = max_weight / n
     z_rand = rand_weight / n
 
-    # ========================================================
     # sigma_hit
-    # ========================================================
-
     if hit_weight > 1e-12:
 
         weighted_squared_error = sum(
@@ -437,15 +398,11 @@ def update_parameters(
         )
 
     else:
-
         # If no measurement is attributed to hit,
         # preserve the previous value.
         sigma_hit = old_parameters["sigma_hit"]
 
-    # ========================================================
     # lambda_short
-    # ========================================================
-
     weighted_short_distance = sum(
         r[1] * z
         for z, r in zip(
@@ -482,10 +439,7 @@ def update_parameters(
     }
 
 
-# ============================================================
 # EM algorithm
-# ============================================================
-
 def learn_intrinsic_parameters(
     scans,
     poses,
@@ -543,10 +497,7 @@ def learn_intrinsic_parameters(
         Dictionary containing the learned parameters.
     """
 
-    # ========================================================
     # Basic validation
-    # ========================================================
-
     if len(scans) != len(poses):
         raise ValueError(
             "scans and poses must have the same length."
@@ -572,10 +523,7 @@ def learn_intrinsic_parameters(
             "lambda_short must be greater than zero."
         )
 
-    # ========================================================
     # Initial parameters
-    # ========================================================
-
     parameters = {
         "z_hit": z_hit,
         "z_short": z_short,
@@ -585,16 +533,10 @@ def learn_intrinsic_parameters(
         "lambda_short": lambda_short
     }
 
-    # ========================================================
     # EM iterations
-    # ========================================================
-
     for iteration in range(max_iterations):
 
-        # ----------------------------------------------------
         # E-STEP
-        # ----------------------------------------------------
-
         z_values = []
         z_hat_values = []
         responsibilities = []
@@ -608,11 +550,7 @@ def learn_intrinsic_parameters(
                 )
 
             for k, z in enumerate(scan):
-
-                # --------------------------------------------
                 # Expected measurement from ray casting
-                # --------------------------------------------
-
                 z_hat = ray_cast(
                     (pose.x, pose.y),
                     pose.th.rad + beam_angles[k],
@@ -620,10 +558,7 @@ def learn_intrinsic_parameters(
                     max_range=z_max
                 )
 
-                # --------------------------------------------
                 # Responsibility calculation
-                # --------------------------------------------
-
                 e = beam_responsibilities(
                     z=z,
                     z_hat=z_hat,
@@ -642,10 +577,7 @@ def learn_intrinsic_parameters(
                 z_hat_values.append(z_hat)
                 responsibilities.append(e)
 
-        # ----------------------------------------------------
         # M-STEP
-        # ----------------------------------------------------
-
         new_parameters = update_parameters(
             z_values=z_values,
             z_hat_values=z_hat_values,
@@ -653,10 +585,7 @@ def learn_intrinsic_parameters(
             old_parameters=parameters
         )
 
-        # ----------------------------------------------------
         # Check convergence
-        # ----------------------------------------------------
-
         old_values = np.array([
             parameters["z_hit"],
             parameters["z_short"],
@@ -684,7 +613,7 @@ def learn_intrinsic_parameters(
         if difference < tolerance:
 
             print(
-                f"Convergence reached at iteration"
+                f"Convergence reached at iteration "
                 f"{iteration + 1}."
             )
 
