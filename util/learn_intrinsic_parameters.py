@@ -1,8 +1,6 @@
 import numpy as np
 
-from angle import Angle
-from pose import Pose
-from ray_cast import ray_cast
+from geometry import Pose, Angle
 
 from beam_range_finder import (
     p_hit,
@@ -176,10 +174,8 @@ def generate_synthetic_dataset(
         for beam_angle in beam_angles:
 
             # Expected measurement
-            z_hat = ray_cast(
-                (pose.x, pose.y),
-                pose.th.rad + beam_angle,
-                obstacle_map,
+            z_hat = obstacle_map.ray_cast(
+                Pose(pose.x, pose.y, pose.th.rad + beam_angle),
                 max_range=z_max
             )
 
@@ -551,10 +547,8 @@ def learn_intrinsic_parameters(
 
             for k, z in enumerate(scan):
                 # Expected measurement from ray casting
-                z_hat = ray_cast(
-                    (pose.x, pose.y),
-                    pose.th.rad + beam_angles[k],
-                    obstacle_map,
+                z_hat = obstacle_map.ray_cast(
+                    Pose(pose.x, pose.y, pose.th.rad + beam_angles[k]),
                     max_range=z_max
                 )
 

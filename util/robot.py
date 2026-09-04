@@ -1,8 +1,9 @@
 # %%
-from angle import Angle
-from pose import Pose
+from geometry import Pose
 from control import VelocityControl
+from maps import Map
 import matplotlib.pyplot as plt
+from sensor import RobotSensor
 
 class DynamicSystem():
     pass
@@ -11,14 +12,26 @@ class MotionModel:
     pass
 
 class Robot(MotionModel):
-    def __init__(self, pos: Pose, name = "Robot"):
+    def __init__(self, pos: Pose, name = "Robot", sensors:list[RobotSensor] = []):
         self.pos = pos
         self.name = name
+        self.sensors = sensors
+        self.has_new_readings = False
 
     def applyControl(self, u: VelocityControl):
         self.pos, u_eff = u.applyControl(self.pos)
+        self.has_new_readings = False
+
+        for sensor in self.sensors:
+            sensor.updatePosition(self.pos)
 
         return u_eff
+
+    def measure(self, m: Map):
+        for sensor in self.sensors:
+            sensor.getReading(m)
+        self.has_new_readings = True
+
 
     def draw(self, ax: plt.Axes, r = 1, linewidths: list[int | float, int | float] = [1 , 1], colors: list[str, str] = ['blue', 'red'], linestyles: list[str, str] = ['-', '-'], alt_label: None | str = None):
         xx = self.pos.x + r * self.pos.th.cos
@@ -32,6 +45,9 @@ class Robot(MotionModel):
         ax.add_patch(
             plt.Circle((self.pos.x, self.pos.y), r, color=colors[1], fill=False, linestyle=linestyles[1], label=self.name if alt_label is None else alt_label, linewidth=linewidths[1])
         )
+
+        for sensor in self.sensors:
+            sensor.draw(ax)
 
         # Set the aspect of the plot to be equal
         ax.set_aspect('equal', adjustable='box')

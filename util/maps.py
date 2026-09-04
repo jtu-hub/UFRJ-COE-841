@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import colorsys
 import numpy as np
+from typing import Dict
 
-from pose import Pose
+from geometry import Pose, Segment, Point
 
 class Landmark:
     def __init__(self, pos: Pose, signature: any):
@@ -56,24 +57,7 @@ class LandmarkMap(Map):
         ax.set_ylim(self.y_lims[0], self.y_lims[1])
 
 
-class Segment:
-    def __init__(self, p1: tuple[float, float], p2: tuple[float, float]):
-        self.p1 = p1
-        self.p2 = p2
-
-    def draw(self, ax: plt.Axes, color: str = 'black',
-             linestyle: str = '-', linewidth: float = 2):
-        ax.plot(
-            [self.p1[0], self.p2[0]],
-            [self.p1[1], self.p2[1]],
-            color=color,
-            linestyle=linestyle,
-            linewidth=linewidth
-        )
-
-
 class ObstacleMap(Map):
-
     def __init__(
         self,
         segments: list[Segment] | None = None,
@@ -101,8 +85,8 @@ class ObstacleMap(Map):
 
         px, py = point
 
-        x1, y1 = segment.p1
-        x2, y2 = segment.p2
+        x1, y1 = segment.p1.x, segment.p1.y
+        x2, y2 = segment.p2.x, segment.p2.y
 
         # Segment vector
         vx = x2 - x1
@@ -140,6 +124,25 @@ class ObstacleMap(Map):
             (py - closest_y)**2
         )
 
+    def ray_cast(
+        self,
+        ray_origin: Pose,
+        max_range: float = np.inf
+    ) -> float:
+        
+        min_distance = max_range
+
+        for segment in self.segments:
+
+            distance = Segment.ray_segment_intersection(
+                ray_origin,
+                segment
+            )
+
+            if distance is not None and distance < min_distance:
+                min_distance = distance
+
+        return min_distance
     # =========================================================
     # Distance from a point to the nearest obstacle
     # =========================================================
@@ -221,7 +224,6 @@ class ObstacleMap(Map):
             self.y_lims[0],
             self.y_lims[1]
         )
-
 
 class DistanceField:
 
@@ -331,3 +333,56 @@ class DistanceField:
             ],
             aspect="equal"
         )
+
+class OccupancyGrid:
+    UNEXPLORED = 0.0
+    FREE = -1.0
+    OCCUPIED = 1.0
+
+    def __init__(self, x_limits: tuple[float, float], y_limits: tuple[float, float], resolution: float):
+        self.explored: Dict[Point, float] = {}
+        self.x_lims = x_limits
+        self.y_lims = y_limits
+        self.resolution = resolution
+
+    def getCoordinateIterators(self):
+        def x_range():
+            x = self.x_lims[0]
+            end = self.x_lims[1]
+            while x <= end + 1e-9:
+                yield x
+                x += self.resolution
+
+        def y_range():
+            y = self.y_lims[0]
+            end = self.y_lims[1]
+            while y <= end + 1e-9:
+                yield y
+                y += self.resolution
+
+        return x_range(), y_range()
+
+    def addExplored(self, coordinates: Point, likelihood: float) -> None:
+        if coordinates in self.explored:
+            old_value = self.explored[coordinates]
+            new_value = (old_value + likelihood) / 2
+            if np.isclose(new_value, self.UNEXPLORED):
+                del self.explored[coordinates]
+            else:
+                self.explored[coordinates] = new_value
+        else:
+            if not np.isclose(likelihood, self.UNEXPLORED):
+                self.explored[coordinates] = likelihood
+
+    def draw(self, ax: plt.Axes) -> None:
+        for coord, likelihood in self.explored.items():
+            if likelihood < self.UNEXPLORED:
+                color = 'green'
+                alpha = np.clip(likelihood / self.FREE, 0, 1)
+            else:
+                color = 'blue'
+                alpha = np.clip(likelihood / self.OCCUPIED, 0, 1)
+            ax.scatter(coord.x, coord.y, c=color, alpha=alpha)
+        ax.set_xlim(self.x_lims[0], self.x_lims[1])
+        ax.set_ylim(self.y_lims[0], self.y_lims[1])           
+

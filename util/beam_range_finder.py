@@ -1,5 +1,6 @@
 from distributions import GaussianDistribution
-from ray_cast import ray_cast
+from geometry import Pose, Angle
+from maps import ObstacleMap
 import numpy as np
 
 
@@ -57,26 +58,24 @@ def beam_measurement_probability(
     return p
 
 def beam_range_finder_model(
-    z,
-    x,
-    obstacle_map,
-    z_max,
-    z_hit,
-    z_short,
-    z_max_weight,
-    z_rand,
-    sigma_hit,
-    lambda_short,
-    beam_angles
+    z: float,
+    x: Pose,
+    obstacle_map: ObstacleMap,
+    z_max: float,
+    z_hit: float,
+    z_short: float,
+    z_max_weight: float,
+    z_rand: float,
+    sigma_hit: float,
+    lambda_short: float,
+    beam_angles: list[Angle]
 ):
     q = 1.0
 
     for k in range(len(z)):
 
-        z_hat = ray_cast(
-            (x.x, x.y),
-            x.th.rad + beam_angles[k],
-            obstacle_map,
+        z_hat = obstacle_map.ray_cast(
+            Pose(x.x, x.y, x.th.rad + beam_angles[k]),
             max_range=z_max
         )
 

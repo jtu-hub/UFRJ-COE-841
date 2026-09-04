@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 from matplotlib.patches import Ellipse
 
-from angle import Angle
+from geometry import Angle
 
 class ProbDistribution:
     def __init__(self, variance, mean = 0):
