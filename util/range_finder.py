@@ -41,7 +41,7 @@ class RangeFinder(RobotSensor):
 
         return self.reading
 
-    def draw(self, ax: plt.Axes, color='b', linestyle='--', **kwargs):
+    def draw(self, ax: plt.Axes, color='orange', linestyle='--', **kwargs):
         if self.reading is not None: self.reading.draw(ax, color=color, linestyle=linestyle, **kwargs)
 
     def pointInFOV(self, p: Point):
@@ -65,6 +65,7 @@ class RangeFinders(RobotSensor):
         self.z_rangers = [RangeFinder(origin, sensor_range=sensor_range, robot_pose=robot_pose, beam_fov=beam_fov) for origin in ray_origins]
         self.reading = []
         self.beam_fov = beam_fov
+        self.range = sensor_range
 
     def getReading(self, m: ObstacleMap, detection_noise: bool = True, std_meas_noise = 0.02):
         self.reading = []
@@ -74,6 +75,9 @@ class RangeFinders(RobotSensor):
 
         return self.reading
 
+    def updatePosition(self, robot_pose):
+        for ranger in self.z_rangers: ranger.updatePosition(robot_pose)
+
     def inverse_range_sensor_model(self, considered_z_rangers, p: Point, alpha: float = 0.1, beta: Angle = Angle.from_deg(1)):
         total = 0.0
         count = 0
@@ -82,16 +86,16 @@ class RangeFinders(RobotSensor):
             sensor = self.z_rangers[idx]
             reading = self.reading[idx]
 
-            dx = p.x - sensor.x
-            dy = p.y - sensor.y
+            dx = p.x - sensor.abs_pos.x
+            dy = p.y - sensor.abs_pos.y
 
             r_hat = np.sqrt(dx**2 + dy**2)
-            th_hat = Angle.atan2(dy, dx) - sensor.th
+            th_hat = Angle.atan2(dy, dx) - sensor.abs_pos.th
 
-            if abs(th_hat.deg) > beta / 2 or r_hat > min(reading.r + alpha / 2, self.sensor_range):
+            if abs(th_hat.rad) > beta.rad / 2 or r_hat > min(reading.r + alpha / 2, self.range):
                 continue
 
-            if reading.r < self.sensor_range and np.abs(r_hat - reading.r) < alpha / 2:
+            if reading.r < self.range and np.abs(r_hat - reading.r) < alpha / 2:
                 total += OccupancyGrid.OCCUPIED
                 count += 1
             elif r_hat <= reading.r:
@@ -109,13 +113,12 @@ class RangeFinders(RobotSensor):
         return sensor_idxs
 
     def update_occupancy_grid(self, m: OccupancyGrid):
-        x_range, y_range = m.getCoordinateIterators()
-        for x in x_range():
-            for y in y_range():
+        for x in np.arange(m.x_lims[0], m.x_lims[1] + m.resolution, m.resolution):
+            for y in np.arange(m.y_lims[0], m.y_lims[1] + m.resolution, m.resolution):
                 p = Point(x,y)
                 sensors = self.pointInFOV(p)
                 if sensors:
                     m.addExplored(p, self.inverse_range_sensor_model(sensors, p, beta=self.beam_fov))
 
-    def draw(self, ax: plt.Axes, color='b', linestyle='--', **kwargs):
+    def draw(self, ax: plt.Axes, color='orange', linestyle='--', **kwargs):
         for ranger in self.z_rangers: ranger.draw(ax, color=color, linestyle=linestyle, **kwargs)

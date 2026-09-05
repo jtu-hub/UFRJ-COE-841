@@ -84,7 +84,7 @@ class VelocityControl(ControlInput):
         theta_new = x0.th
     else:
         #curved motion (unicycle model)
-        theta_new = x0.th + u_eff.dth
+        theta_new = Angle(x0.th.rad + u_eff.dth.rad)
         x_new = x0.x + u_eff.r * ( theta_new.sin - x0.th.sin)
         y_new = x0.y + u_eff.r * (-theta_new.cos + x0.th.cos)
 

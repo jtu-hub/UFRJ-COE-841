@@ -345,23 +345,6 @@ class OccupancyGrid:
         self.y_lims = y_limits
         self.resolution = resolution
 
-    def getCoordinateIterators(self):
-        def x_range():
-            x = self.x_lims[0]
-            end = self.x_lims[1]
-            while x <= end + 1e-9:
-                yield x
-                x += self.resolution
-
-        def y_range():
-            y = self.y_lims[0]
-            end = self.y_lims[1]
-            while y <= end + 1e-9:
-                yield y
-                y += self.resolution
-
-        return x_range(), y_range()
-
     def addExplored(self, coordinates: Point, likelihood: float) -> None:
         if coordinates in self.explored:
             old_value = self.explored[coordinates]
@@ -382,7 +365,20 @@ class OccupancyGrid:
             else:
                 color = 'blue'
                 alpha = np.clip(likelihood / self.OCCUPIED, 0, 1)
-            ax.scatter(coord.x, coord.y, c=color, alpha=alpha)
-        ax.set_xlim(self.x_lims[0], self.x_lims[1])
-        ax.set_ylim(self.y_lims[0], self.y_lims[1])           
+            ax.scatter(coord.x, coord.y, c=color, alpha=alpha, marker='s')
+        ax.set_xlim(self.x_lims[0] - self.resolution/2, self.x_lims[1] + self.resolution/2)
+        ax.set_ylim(self.y_lims[0] - self.resolution/2, self.y_lims[1] + self.resolution/2)  
+        ax.set_aspect('equal', adjustable='box')    
+
+    def drawImg(self, ax: plt.Axes):
+        nx = int(((self.x_lims[1] + self.resolution) - self.x_lims[0]) / self.resolution)
+        ny = int(((self.y_lims[1] + self.resolution) - self.y_lims[0]) / self.resolution)
+
+        print(nx,ny, int(nx), int(ny))
+        img = np.zeros((nx,ny))
+
+        for coord, likelihood in self.explored.items():
+            img[int((coord.y - self.y_lims[0]) / self.resolution), int((coord.x - self.y_lims[0]) / self.resolution)] = likelihood
+
+        ax.imshow(img, cmap='Blues', extent=[self.x_lims[0], self.x_lims[1], self.y_lims[0], self.y_lims[1]], origin='lower')
 

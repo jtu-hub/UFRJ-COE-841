@@ -32,7 +32,6 @@ class Robot(MotionModel):
             sensor.getReading(m)
         self.has_new_readings = True
 
-
     def draw(self, ax: plt.Axes, r = 1, linewidths: list[int | float, int | float] = [1 , 1], colors: list[str, str] = ['blue', 'red'], linestyles: list[str, str] = ['-', '-'], alt_label: None | str = None):
         xx = self.pos.x + r * self.pos.th.cos
         yy = self.pos.y + r * self.pos.th.sin
