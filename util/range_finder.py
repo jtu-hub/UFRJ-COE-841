@@ -112,7 +112,7 @@ class RangeFinders(RobotSensor):
 
         return sensor_idxs
 
-    def update_occupancy_grid(self, m: OccupancyGrid):
+    def update_occupancy_grid(self, m: OccupancyGrid):#TODO move to occ grid class, improve 
         for x in np.arange(m.x_lims[0], m.x_lims[1] + m.resolution, m.resolution):
             for y in np.arange(m.y_lims[0], m.y_lims[1] + m.resolution, m.resolution):
                 p = Point(x,y)

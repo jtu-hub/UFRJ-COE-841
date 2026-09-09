@@ -346,6 +346,8 @@ class OccupancyGrid:
         self.resolution = resolution
 
     def addExplored(self, coordinates: Point, likelihood: float) -> None:
+        if np.isclose(likelihood, self.UNEXPLORED): return
+
         if coordinates in self.explored:
             old_value = self.explored[coordinates]
             new_value = (old_value + likelihood) / 2
@@ -354,8 +356,7 @@ class OccupancyGrid:
             else:
                 self.explored[coordinates] = new_value
         else:
-            if not np.isclose(likelihood, self.UNEXPLORED):
-                self.explored[coordinates] = likelihood
+            self.explored[coordinates] = likelihood
 
     def draw(self, ax: plt.Axes) -> None:
         for coord, likelihood in self.explored.items():
@@ -374,7 +375,6 @@ class OccupancyGrid:
         nx = int(((self.x_lims[1] + self.resolution) - self.x_lims[0]) / self.resolution)
         ny = int(((self.y_lims[1] + self.resolution) - self.y_lims[0]) / self.resolution)
 
-        print(nx,ny, int(nx), int(ny))
         img = np.zeros((nx,ny))
 
         for coord, likelihood in self.explored.items():

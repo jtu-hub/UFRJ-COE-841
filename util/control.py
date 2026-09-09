@@ -168,3 +168,99 @@ class VelocityControl(ControlInput):
   
   def __str__(self):
      return f"VelocityControl({self.v}, {self.w}, {self.dt})"
+
+def generateConstantVelocityTrajectory(n_control_inputs: int, v: float, w: float, dt: float):
+   return [VelocityControl(v, w, dt) for _ in range(n_control_inputs)]
+
+def generateSquareTrajectory(dt=0.05, total_time=20.0, side_length=6.0, corner_radius=0.6):
+    n_steps = int(total_time / dt)
+
+    n_segments = 8  # 4 straights + 4 turns
+    t_per_segment = total_time / n_segments
+
+    v_straight = side_length / t_per_segment
+    w_straight = 0.0
+    n_straight = int(t_per_segment / dt)
+
+    w_turn = (np.pi / 2) / t_per_segment
+    v_turn = corner_radius * w_turn
+    n_turn = int(t_per_segment / dt)
+
+    controls = []
+
+    for i in range(4):
+        controls = [*controls, *generateConstantVelocityTrajectory(n_straight, v_straight, w_straight, dt)]
+        controls = [*controls, *generateConstantVelocityTrajectory(n_turn, v_turn, w_turn, dt)]
+
+    # Trim or pad to match total time exactly
+    if len(controls) > n_steps:
+        controls = controls[:n_steps]
+    else:
+        while len(controls) < n_steps:
+            controls.append(VelocityControl(0, 0, dt))
+
+    return controls
+
+
+def generateRandomVelocityTrajectory(n_control_inputs: int, dt: float, max_v: float = 1, max_w: float = 0.5):
+
+    """
+    Generate a random, continuous trajectory for `n_control_inputs` steps.
+    The trajectory is composed of `n_segments` (1 to `n_control_inputs // 3`),
+    where each segment is constant, linearly increasing, or linearly decreasing.
+    """
+    n_segments = np.random.randint(1, n_control_inputs // 3 + 1)
+    segment_lengths = np.random.randint(max(1, n_control_inputs // (n_segments + 1)), 1 + n_control_inputs // n_segments, size=n_segments)
+    segment_lengths[-1] += n_control_inputs - np.sum(segment_lengths)  # Ensure total length is correct
+
+    # Initialize trajectories
+    v_trajectory = np.zeros(n_control_inputs)
+    omega_trajectory = np.zeros(n_control_inputs)
+
+    # Generate random segments for v and omega
+    for trajectory in [v_trajectory, omega_trajectory]:
+        start_idx = 0
+        for i in range(n_segments):
+            length = segment_lengths[i]
+            end_idx = start_idx + length
+
+            # Randomly choose segment type: 0=constant, 1=linear increasing, 2=linear decreasing
+            segment_type = np.random.randint(0, 3)
+
+            # Random start and end values for the segment
+            if start_idx == 0:
+                start_val = np.random.uniform(-1.0, 1.0)  # Random initial value
+            else:
+                start_val = trajectory[start_idx - 1]  # Ensure continuity
+
+            if segment_type == 0:  # Constant
+                end_val = start_val
+            else:  # Linear (increasing or decreasing)
+                slope = np.random.uniform(-0.5, 0.5)  # Random slope
+                if segment_type == 1:  # Increasing
+                    slope = abs(slope)
+                else:  # Decreasing
+                    slope = -abs(slope)
+                end_val = start_val + slope * length
+
+            # Fill the segment
+            if length == 1:
+                trajectory[start_idx:end_idx] = start_val
+            else:
+                trajectory[start_idx:end_idx] = np.linspace(start_val, end_val, length)
+
+            start_idx = end_idx
+
+    omega_trajectory -= np.mean(omega_trajectory)
+    v_trajectory -= np.mean(v_trajectory)
+    us = []
+    for v,w in zip(v_trajectory, omega_trajectory):
+        if abs(v) >= max_v:
+            v = np.sign(v) * max_v
+
+        if abs(w) >= max_w:
+            w = np.sign(w) * max_w
+
+        us.append(VelocityControl(v,w,dt))
+
+    return us

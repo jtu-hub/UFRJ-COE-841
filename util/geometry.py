@@ -120,6 +120,9 @@ class Point:
     def __eq__(self, other):
         return isinstance(other, Point) and self.x == other.x and self.y == other.y
 
+    def __repr__(self):
+        return f"Point({self.x:.2f}, {self.y:.2f})"
+
 class Segment:
     def __init__(self, p1: Point | tuple[float,float], p2: Point | tuple[float,float]):
         if isinstance(p1, tuple): p1 = Point.from_tuple(p1) 
@@ -166,3 +169,6 @@ class Segment:
             return None
 
         return t
+    
+    def __repr__(self):
+        return f"Segment({self.p1} -> {self.p2})"
