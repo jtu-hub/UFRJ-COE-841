@@ -13,17 +13,30 @@ class DetectedFeature:
         self.phi = phi
         self.s = signature
 
+    def dx(self, th: Angle):
+        return self.r * (self.phi + th).cos
+
+    def dy(self, th: Angle):
+        return self.r * (self.phi + th).sin
+
     def draw(self, ax: plt.Axes, measurement_origin: Pose, color='b', linestyle='--', **kwargs):
 
         x_r, y_r, th_r = measurement_origin.x, measurement_origin.y, measurement_origin.th
         
-        x_f = x_r + self.r * (self.phi + th_r).cos
-        y_f = y_r + self.r * (self.phi + th_r).sin
+        x_f = x_r + self.dx(th_r)
+        y_f = y_r + self.dy(th_r)
         
         ax.plot([measurement_origin.x, x_f],[measurement_origin.y, y_f], linestyle=linestyle, color=color)
 
     def __repr__(self):
         return f"DetectedFeature({self.r:.2f}, {self.phi}, {self.s})"
+
+    def as_array(self):
+      return np.array([self.r, self.phi.rad, self.s]).reshape((3,1))
+  
+    @staticmethod
+    def from_array(pose_arr: np.array):
+        return DetectedFeature(pose_arr[0][0], Angle.from_radians(pose_arr[1][0]), pose_arr[2][0])
 
 class Camera(RobotSensor):
     def __init__(self, rel_pos: Pose, field_of_veiw: Angle = Angle.from_deg(80.), sensor_range: float = 5., robot_pose: Pose = Pose(0, 0, 0)):

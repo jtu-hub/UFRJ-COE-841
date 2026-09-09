@@ -105,6 +105,17 @@ class Pose:
     def __repr__(self):
             return f"Pose({self.x:.2f}, {self.y:.2f}, {self.th})"
 
+    @property
+    def as_array(self):
+        return np.array([float(self.x), float(self.y), float(self.th)]).reshape((3,1))
+    
+    @staticmethod
+    def from_array(pose_arr: np.array):
+        if pose_arr.shape == (3, 1):
+            return Pose(pose_arr[0][0], pose_arr[1][0], Angle.from_radians(pose_arr[2][0]))
+        elif pose_arr.shape == (2, 1):
+            return Pose(pose_arr[0][0], pose_arr[1][0], Angle(0))
+
 class Point:
     def __init__(self, x: float, y: float):
         self.x = x
