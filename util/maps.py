@@ -49,9 +49,13 @@ class LandmarkMap(Map):
             self.colors.append(hex_color)
 
 
-    def draw(self, ax: plt.Axes, landmark_labels: bool = False):
-        for l_idx, l in enumerate(self.landmarks):
-            l.draw(ax, color = self.colors[l_idx], set_label=landmark_labels)
+    def draw(self, ax: plt.Axes, landmark_labels: bool = False, correspondences: list | None = None):
+        if correspondences:
+            for c in correspondences:
+                self.landmarks[c].draw(ax, color = self.colors[c], set_label=landmark_labels)
+        else:
+            for l_idx, l in enumerate(self.landmarks):
+                l.draw(ax, color = self.colors[l_idx], set_label=landmark_labels)
 
         ax.set_xlim(self.x_lims[0], self.x_lims[1])
         ax.set_ylim(self.y_lims[0], self.y_lims[1])

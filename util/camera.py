@@ -31,12 +31,13 @@ class DetectedFeature:
     def __repr__(self):
         return f"DetectedFeature({self.r:.2f}, {self.phi}, {self.s})"
 
+    @property
     def as_array(self):
       return np.array([self.r, self.phi.rad, self.s]).reshape((3,1))
   
     @staticmethod
     def from_array(pose_arr: np.array):
-        return DetectedFeature(pose_arr[0][0], Angle.from_radians(pose_arr[1][0]), pose_arr[2][0])
+        return DetectedFeature(pose_arr[0][0], Angle(pose_arr[1][0]), pose_arr[2][0])
 
 class Camera(RobotSensor):
     def __init__(self, rel_pos: Pose, field_of_veiw: Angle = Angle.from_deg(80.), sensor_range: float = 5., robot_pose: Pose = Pose(0, 0, 0)):
@@ -60,7 +61,7 @@ class Camera(RobotSensor):
 
         return DetectedFeature(r_rf, phi_rf, reading.s)
     
-    def detectLandmark(self, landmark: Landmark, detection_prob: bool = False, detection_noise: bool= False, std_meas_noise: float = 0.2, **kwargs) -> tuple[bool, float]:
+    def detectLandmark(self, landmark: Landmark, detection_prob: bool = False, detection_noise: bool= True, std_meas_noise: float = 0.05, **kwargs) -> tuple[bool, float]:
         dx, dy = landmark.pos.x - self.abs_pos.x, landmark.pos.y - self.abs_pos.y
 
         r = np.sqrt(dx**2 + dy**2)
@@ -81,7 +82,7 @@ class Camera(RobotSensor):
             is_detected = False
 
         r_noisy = r + np.random.normal(0, std_meas_noise) if is_detected else None
-        phi_noisy = phi + Angle(np.random.normal(0, std_meas_noise) / np.pi) if is_detected else None
+        phi_noisy = phi + Angle(np.random.normal(0, std_meas_noise / 10) / np.pi) if is_detected else None
 
         return (is_detected, r_noisy, phi_noisy) if detection_noise else (is_detected, r, phi)
 

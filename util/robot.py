@@ -30,12 +30,12 @@ class Robot(MotionModel):
 
         return u_eff
 
-    def measure(self, m: Map):
+    def measure(self, m: Map, **kwargs):
         for sensor in self.sensors:
-            sensor.getReading(m)
+            sensor.getReading(m, **kwargs)
         self.has_new_readings = True
 
-    def draw(self, ax: plt.Axes, r = 1, linewidths: list[int | float, int | float] = [1 , 1], colors: list[str, str] = ['blue', 'red'], linestyles: list[str, str] = ['-', '-'], alt_label: None | str = None, draw_sensors: bool = True):
+    def draw(self, ax: plt.Axes, r = 1, linewidths: list[int | float, int | float] = [1 , 1], colors: list[str, str] = ['blue', 'red'], linestyles: list[str, str] = ['-', '-'], alt_label: None | str = None, draw_sensors: bool = True, **kwargs):
         xx = self.pos.x + r * self.pos.th.cos
         yy = self.pos.y + r * self.pos.th.sin
 
@@ -50,7 +50,7 @@ class Robot(MotionModel):
 
         if draw_sensors:
             for sensor in self.sensors:
-                sensor.draw(ax)
+                sensor.draw(ax, **kwargs)
 
         # Set the aspect of the plot to be equal
         ax.set_aspect('equal', adjustable='box')
