@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import warnings
 
 from motion_models import CircularMotion
 from control import VelocityControl
@@ -8,197 +9,294 @@ from geometry import Angle, Pose
 from robot import Robot
 from distributions import GaussianDistribution
 
-class PositionEstimate:
-    def __init__(self, mu=None, sigma0_x=0.1, sigma0_y=0.1, sigma0_th=np.pi / 12, r_mat=None, q_mat=None):
-        if mu is None: mu = np.zeros((3, 1))
-        if r_mat is None: r_mat = np.eye(3) * 0.01
-        if q_mat is None: q_mat = np.eye(3) * 0.001
+class EKFSlamKnownCorrespondences:
+    def __init__(self, n_landmarks, r_mat = np.eye(3) * 0.001, q_mat = np.diag([0.5, 0.5])):
+        self.n_lm = n_landmarks
+        self.n_lm_detected = 0
+        self.correspondence = {}
 
-        self.mu = np.array(mu, dtype=float, copy=True)
-        self.sigma_pos = np.diag(np.array([sigma0_x, sigma0_y, sigma0_th],dtype=float) ** 2)
-        self.r_mat = np.array(r_mat, dtype=float, copy=True)
-        self.q_mat = np.array(q_mat, dtype=float, copy=True)
+        self.dim_m_est  = 2 # [mu_m_x, mu_m_y]
+        self.dim_pos_est = 3 # [mu_x, mu_y, mu_th]
+        self.mu    = np.zeros((self.dim_pos_est + self.n_lm * self.dim_m_est,1))
+        self.sigma = np.zeros((self.dim_pos_est + self.n_lm * self.dim_m_est, self.dim_pos_est + self.n_lm * self.dim_m_est))
+        self.r_mat = r_mat.copy()
+        self.q_mat = q_mat.copy()
+        self.mu_acc    = np.zeros_like(self.mu)
+        self.sigma_acc = np.zeros_like(self.sigma)
 
-    def updateEstimateAfterMovement(self, motion: CircularMotion):
-        u = motion.toVelocityControl()
+    @property
+    def mu_x(self):
+        return self.mu[:self.dim_pos_est].copy()
 
-        mu_old = Pose.from_array(self.mu)
+    @property
+    def mu_x_x(self):
+        return self.mu_x[0,0].copy()
+    
+    @property
+    def mu_x_y(self):
+        return self.mu_x[1,0].copy()
+
+    @property
+    def mu_x_th(self):
+        return Angle(self.mu_x[2,0].copy()).clip()
+    
+    @property
+    def mu_m(self):
+        return self.mu[self.dim_pos_est:].copy()
+    
+    @property
+    def sigma_x(self):
+        return self.sigma[:self.dim_pos_est, :self.dim_pos_est].copy()
+
+    @property
+    def sigma_m(self):        
+        return self.sigma[self.dim_pos_est:, self.dim_pos_est:].copy()
+
+    @property
+    def sigma_x_m(self):
+        return self.sigma[:self.dim_pos_est, self.dim_pos_est:].copy()
+        
+    @property
+    def sigma_m_x(self):
+        return self.sigma[self.dim_pos_est:, :self.dim_pos_est].copy()
+
+    @mu_x.setter
+    def mu_x(self, value):
+        self.mu[:self.dim_pos_est] = value
+
+    @mu_m.setter
+    def mu_m(self, value):
+        self.mu[self.dim_pos_est:] = value
+
+    @sigma_x.setter
+    def sigma_x(self, value):
+        self.sigma[:self.dim_pos_est, :self.dim_pos_est] = value
+
+    @sigma_m.setter
+    def sigma_m(self, value):        
+        self.sigma[self.dim_pos_est:, self.dim_pos_est:] = value
+
+    @sigma_x_m.setter
+    def sigma_x_m(self, value):
+        self.sigma[:self.dim_pos_est, self.dim_pos_est:] = value
+        
+    @sigma_m_x.setter
+    def sigma_m_x(self, value):
+        self.sigma[self.dim_pos_est:, :self.dim_pos_est] = value
+    
+    def get_mu_m_i(self, idx):
+        if idx >= self.n_lm: 
+            raise IndexError(f"Trying to access mu_m for landmark index {idx}, above actual size {self.n_lm}")
+        
+        i_start = self.dim_pos_est + idx * self.dim_m_est
+        i_end = i_start + self.dim_m_est
+        return self.mu[i_start:i_end].copy()
+    
+    def get_sigma_m_i(self, idx):
+        if idx >= self.n_lm: 
+            raise IndexError(f"Trying to access sigma_m for landmark index {idx}, above actual size {self.n_lm}")
+        
+        i_start = self.dim_pos_est + idx * self.dim_m_est
+        i_end = i_start + self.dim_m_est
+        return self.sigma[i_start:i_end, i_start:i_end].copy()
+
+    def get_sigma_m_i_x(self, idx):
+        if idx >= self.n_lm: 
+            raise IndexError(f"Trying to access sigma_m_x for landmark index {idx}, above actual size {self.n_lm}")
+        
+        i_start = self.dim_pos_est + idx * self.dim_m_est
+        i_end = i_start + self.dim_m_est
+        return self.sigma[i_start:i_end, :self.dim_pos_est].copy()
+
+    def get_sigma_x_m_i(self, idx):
+        if idx >= self.n_lm: 
+            raise IndexError(f"Trying to access sigma_x_m for landmark index {idx}, above actual size {self.n_lm}")
+        
+        i_start = self.dim_pos_est + idx * self.dim_m_est
+        i_end = i_start + self.dim_m_est
+        return self.sigma[:self.dim_pos_est, i_start:i_end].copy()
+
+    def set_mu_m_i(self, idx, value):
+        if idx >= self.n_lm:
+            raise IndexError(f"Trying to access mu_m for landmark index {idx}, above actual size {self.n_lm}")
+        
+        i_start = self.dim_pos_est + idx * self.dim_m_est
+        i_end = i_start + self.dim_m_est
+        self.mu[i_start:i_end] = value.copy()
+
+    def set_sigma_m_i(self, idx, value):
+        if idx >= self.n_lm:
+            raise IndexError(f"Trying to access sigma_m for landmark index {idx}, above actual size {self.n_lm}")
+        
+        i_start = self.dim_pos_est + idx * self.dim_m_est
+        i_end = i_start + self.dim_m_est
+        self.sigma[i_start:i_end, i_start:i_end] = value.copy()
+
+    def set_sigma_m_i_x(self, idx, value):
+        if idx >= self.n_lm:
+            raise IndexError(f"Trying to access sigma_m_x for landmark index {idx}, above actual size {self.n_lm}")
+        
+        i_start = self.dim_pos_est + idx * self.dim_m_est
+        i_end = i_start + self.dim_m_est
+        self.sigma[i_start:i_end, :self.dim_pos_est] = value.copy()
+
+    def set_sigma_x_m_i(self, idx, value):
+        if idx >= self.n_lm:
+            raise IndexError(f"Trying to access sigma_x_m for landmark index {idx}, above actual size {self.n_lm}")
+        
+        i_start = self.dim_pos_est + idx * self.dim_m_est
+        i_end = i_start + self.dim_m_est
+        self.sigma[:self.dim_pos_est, i_start:i_end] = value.copy()
+
+    def updatePositionEstimate(self, motion: CircularMotion | VelocityControl):
+        if isinstance(motion, CircularMotion):
+            u = motion.toVelocityControl()
+        else: 
+            u = motion.copy()
+
+        mu_old = Pose.from_array(self.mu_x)
         g_mat = u.g_mat(mu_old)
 
-        self.mu, _ = u.applyControl(mu_old, motion_noise=False)
-        self.mu = self.mu.as_array
-        self.sigma_pos = g_mat @ self.sigma_pos @ g_mat.T + self.r_mat
+        #propagate mu through system dynamics
+        self.mu_x = u.applyControl(mu_old)[0].as_array
 
-        return g_mat
+        g_sxx = g_mat @ self.sigma_x @ g_mat.T
+        g_sxx = (g_sxx + g_sxx.T) / 2.0
+        g_sxm = g_mat @ self.sigma_x_m
 
-    def updateEstimateAfterMeasurement(self, h_mat_x, k_mat_x, dz):
-        self.mu += k_mat_x @ dz
-        self.mu[2,0] = Angle(self.mu[2,0]).clip().rad
-        temp_mat = (np.eye(3) - k_mat_x @ h_mat_x)
-        self.sigma_pos = temp_mat @ self.sigma_pos @ temp_mat.T + k_mat_x @ self.q_mat @ k_mat_x.T
+        self.sigma_x = g_sxx + self.r_mat
+        self.sigma_x_m = g_sxm
+        self.sigma_m_x = g_sxm.T
+        #sigma_m_m stays invariant in the position update
 
-    def draw(self, ax: plt.Axes, **kwargs):
-        Robot(Pose.from_array(self.mu), name="Estimate").draw(ax, r=0.1, linestyles=['--','--'])
-        GaussianDistribution.plotGaussian2D(ax, self.mu[:2,:],self.sigma_pos[:2,:2], n_sigmas=3, draw_all_sigma=False, draw_mu=False)
+    def h_mat_init(self, r, alpha):
+        #alpha being the absolute angle of r, usually mu_x_th + z.phi
+        h_mat_x_init = np.array([
+            [1, 0, -r * alpha.sin],
+            [0, 1,  r * alpha.cos]
+        ])
 
+        h_mat_m_init = np.array([
+            [alpha.cos, -r * alpha.sin],
+            [alpha.sin,  r * alpha.cos]
+        ])
 
-class LandmarkEstimate:
-    def __init__(self, detected_feature: DetectedFeature, mu_pose_estimate=None, sigma0_x=0.1, sigma0_y=0.1, sigma0_s=1e-6, q_mat=None, sigma_pos=None):
-        if mu_pose_estimate is None: mu_pose_estimate = np.zeros((3, 1))
-        if q_mat is None: q_mat = np.eye(3) * 0.001
+        return h_mat_x_init, h_mat_m_init
 
-        self.q_mat = np.array(q_mat, dtype=float, copy=True)
+    def initializeNewLandmark(self, z: DetectedFeature):
+        if self.n_lm_detected >= self.n_lm:
+            warnings.warn(f"Detcted feature will be ignored!\n---> Detected a new feature {z} when all {self.n_lm} available landmark estimates are already allocated to another landmark")
+            return False
+            
+        self.correspondence[z.s] = self.n_lm_detected
 
-        mu_pose_estimate = np.array(mu_pose_estimate, dtype=float, copy=False)
-        th = Angle(mu_pose_estimate[2,0])
+        mu_m_init = np.array([
+            self.mu_x_x + z.dx(self.mu_x_th), 
+            self.mu_x_y + z.dy(self.mu_x_th)
+        ]).reshape((2,1))
 
-        self.mu = np.array([
-            mu_pose_estimate[0,0] + detected_feature.dx(th), 
-            mu_pose_estimate[1,0] + detected_feature.dy(th),
-            detected_feature.s
-        ]).reshape((3,1))
+        h_mat_x_init, h_mat_m_init = self.h_mat_init(z.r, z.phi + self.mu_x_th)
+        sigma_m_init = h_mat_x_init @ self.sigma_x @ h_mat_x_init.T + h_mat_m_init @ self.q_mat @ h_mat_m_init.T
+        sigma_m_init = (sigma_m_init + sigma_m_init.T) / 2
 
-        if sigma_pos is None:
-            sigma_pos = np.diag(np.array([sigma0_x, sigma0_y, np.pi / 12], dtype=float) ** 2)
+        self.set_mu_m_i(self.n_lm_detected, mu_m_init)
+        self.set_sigma_m_i(self.n_lm_detected, sigma_m_init)
+        self.n_lm_detected += 1
 
-        sigma_pos = np.array(sigma_pos, dtype=float, copy=False)
+        return True
 
-        h_lm_x, h_lm_z = self.h_mat_init(detected_feature, th)
+    def updateLandmarkEstimates(self, z: DetectedFeature):
+        if z.s not in self.correspondence:
+            if not self.initializeNewLandmark(z): return
+    
+        i= self.correspondence[z.s]
 
-        self.sigma_lm = (h_lm_x @ sigma_pos @ h_lm_x.T + h_lm_z @ self.q_mat @ h_lm_z.T)
-        self.sigma_lm_x = (sigma_pos @ h_lm_x.T)
+        delta = self.get_mu_m_i(i) - np.array([self.mu_x_x, self.mu_x_y]).reshape((2,1))
+        q = float(delta.T @ delta)
 
-        self.sigma0_x = sigma0_x
-        self.sigma0_y = sigma0_y
-        self.sigma0_s = sigma0_s
-
-    def updateEstimate(self, detected_feature: DetectedFeature, pos_est: PositionEstimate, num_tol=1e-6):
-        delta = self.mu - pos_est.mu
-
-        q = max(num_tol, delta[0,0]**2 + delta[1,0]**2)
         r_hat   = np.sqrt(q)
-        phi_hat = Angle.atan2(delta[1,0], delta[0,0]) - Angle(pos_est.mu[2,0])
-        s_hat   = self.mu[2,0]
+        phi_hat = Angle.atan2(delta[1,0], delta[0,0]) - self.mu_x_th
+        z_hat = np.array([r_hat, phi_hat.rad]).reshape((2,1))
 
-        h_mat_x, h_mat_lm = self.h_mat(delta[0,0], delta[1,0], q, r_hat, num_tol=num_tol)
+        dz = (z.as_array[:2] - z_hat)
+        dz[1,0] = Angle(dz[1,0]).clip().rad
 
-        innovation_cov = (
-            h_mat_x @ pos_est.sigma_pos @ h_mat_x.T + 
-            h_mat_x @ self.sigma_lm_x @ h_mat_lm.T + 
-            h_mat_lm @ self.sigma_lm_x.T @ h_mat_x.T + 
-            h_mat_lm @ self.sigma_lm @ h_mat_lm.T +
+        h_mat_x, h_mat_m = self.h_mat(delta[0,0].copy(), delta[1,0].copy(), q, r_hat)
+
+        hsh = (
+            h_mat_x @ self.sigma_x            @ h_mat_x.T +
+            h_mat_m @ self.get_sigma_m_i_x(i) @ h_mat_x.T + #TODO: can be optimized, the term below is the transpose of this one
+            h_mat_x @ self.get_sigma_x_m_i(i) @ h_mat_m.T + 
+            h_mat_m @ self.get_sigma_m_i(i)   @ h_mat_m.T +
             self.q_mat
         )
 
-        gain_x = pos_est.sigma_pos @ h_mat_x.T + self.sigma_lm_x @ h_mat_lm.T
-
-        gain_lm = self.sigma_lm_x.T @ h_mat_x.T + self.sigma_lm @ h_mat_lm.T
-
-        k_mat_x = np.linalg.solve(innovation_cov, gain_x.T ).T
-        k_mat_lm = np.linalg.solve(innovation_cov, gain_lm.T).T
-
-        dz = np.array([
-            detected_feature.r - r_hat,
-            (detected_feature.phi - phi_hat).rad,
-            detected_feature.s - s_hat
-        ]).reshape((3, 1))
-
-        pos_est.mu += k_mat_x @ dz
-        pos_est.mu[2, 0] = Angle(pos_est.mu[2, 0]).clip().rad
-
-        self.mu += k_mat_lm @ dz
-
-        sigma_joint = np.block([
-            [pos_est.sigma_pos, self.sigma_lm_x],
-            [self.sigma_lm_x.T, self.sigma_lm  ]
-        ])
-
-        h_joint = np.hstack([
-            h_mat_x,
-            h_mat_lm
-        ])
-
-        k_joint = np.vstack([k_mat_x, k_mat_lm])
-
-        joseph_temp = np.eye(6) - k_joint @ h_joint
-
-        sigma_joint = (
-            joseph_temp @ sigma_joint @ joseph_temp.T + 
-            k_joint @ self.q_mat @ k_joint.T
+        # sh = [sh_x, sh_0, ...sh_N]^T, 
+        # - sh_x = sigma_xx     @ h_x.T + sigma_x{m_i}     @ h_m.T; 
+        # - sh_k = sigma_{m_k}x @ h_x.T + sigma_{m_k}{m_i} @ h_m.T; for k \in {0, ..., N-1}
+        i_start = self.dim_pos_est + i * self.dim_m_est
+        sh = (
+            self.sigma[:, :self.dim_pos_est]               @ h_mat_x.T + #[sigma_xx     sigma_{m_k}x    ].T @ h_mat_x.T
+            self.sigma[:, i_start: i_start+self.dim_m_est] @ h_mat_m.T   #[sigma_x{m_i} sigma_{m_k}{m_i}].T @ h_mat_m.T
         )
-        #make numerically fully simmetric
-        sigma_joint = (sigma_joint + sigma_joint.T) / 2.0
 
-        # Extract the updated covariance blocks.
-        pos_est.sigma_pos = sigma_joint[:3, :3]
-        self.sigma_lm_x   = sigma_joint[:3, 3:]
-        self.sigma_lm     = sigma_joint[3:, 3:]
+        k = np.linalg.solve(hsh, sh.T).T
+        k_hx = k @ h_mat_x
+        k_hm = k @ h_mat_m
+
+        mu_corr = k @ dz
+        self.mu += mu_corr
+
+        s_corr  = np.eye(self.mu.shape[0])
+        s_corr[:, :self.dim_pos_est]               -= k_hx
+        s_corr[:, i_start: i_start+self.dim_m_est] -= k_hm
+        self.sigma = s_corr @ self.sigma
+        self.sigma = (self.sigma + self.sigma.T) / 2
+
 
     def h_mat(self, dx, dy, q, r, num_tol=1e-6):
         h_mat_x = np.array([
             [-r * dx, -r * dy,  0],
-            [  -dy  ,    dx  , -q],
-            [   0   ,    0   ,  0]
+            [   dy  ,   -dx  , -q],
         ])
 
         h_mat_lm = np.array([
-            [r * dx, r * dy, 0],
-            [ -dy  ,   dx  , 0],
-            [  0   ,    0  , q]
+            [r * dx, r * dy],
+            [ -dy  ,   dx  ]
         ])
 
         den = max(q, num_tol)
 
-        return h_mat_x / den, h_mat_lm / den
+        return h_mat_x / den, h_mat_lm / den    
 
-    def h_mat_init(self, detected_feature: DetectedFeature, mu_pos_est_th: Angle):
-        cos_a = (detected_feature.phi + mu_pos_est_th).cos
-        sin_a = (detected_feature.phi + mu_pos_est_th).sin
-        r = detected_feature.r
+    def resetAccumulatedAdjustments(self):
+        self.mu_acc    = np.zeros_like(self.mu)
+        self.sigma_acc = np.eye(self.mu.shape[0])
 
-        h_lm_x = np.array([
-            [1.0, 0.0, -r * sin_a],
-            [0.0, 1.0,  r * cos_a],
-            [0.0, 0.0,  0.0]
-        ])
+    def update(self, motion: CircularMotion | VelocityControl, detected_features: list[DetectedFeature] | None):
+        self.updatePositionEstimate(motion)
 
-        h_lm_z = np.array([
-            [cos_a, -r * sin_a, 0.0],
-            [sin_a,  r * cos_a, 0.0],
-            [0.0,         0.0,          1.0]
-        ])
-
-        return h_lm_x, h_lm_z
-    
-    def draw(self, ax: plt.Axes, color='b', **kwargs):
-        ax.add_patch(
-            plt.Circle((self.mu[0,0], self.mu[1,0]), .1, color=color, fill=False, linestyle='-', linewidth=2, label="$\\mu$")
-        )
-        GaussianDistribution.plotGaussian2D(ax, self.mu[:2,:],self.sigma_lm[:2,:2], color=color, n_sigmas=3, draw_all_sigma=False, draw_mu=False)
-
-
-class EKFSlamKnownCorrespondences:
-    def __init__(self, mu=None, **kwargs):
-        if mu is None: mu = np.zeros((3, 1))
-
-        self.pos_est = PositionEstimate(mu, **kwargs)
-        self.lm_ests = {}
-
-    def update(self, motion: CircularMotion, detected_features: list[DetectedFeature], num_tol=1e-6):
-        g_mat = self.pos_est.updateEstimateAfterMovement(motion)
-
-        for landmark in self.lm_ests.values():
-            landmark.sigma_lm_x = (g_mat @ landmark.sigma_lm_x)
-
-        for detected_feature in detected_features:
-            if detected_feature.s not in self.lm_ests:
-                self.lm_ests[detected_feature.s] = LandmarkEstimate(detected_feature, self.pos_est.mu, q_mat=self.pos_est.q_mat, sigma_pos=self.pos_est.sigma_pos)
-
-            self.lm_ests[detected_feature.s].updateEstimate(detected_feature, self.pos_est, num_tol=num_tol)
+        if detected_features:
+            for feature in detected_features:
+                self.updateLandmarkEstimates(feature)
 
     def draw(self, ax: plt.Axes, lm_colors, **kwargs):
-        for lm in self.lm_ests:
-            self.lm_ests[lm].draw(ax, color=lm_colors[lm])
+        GaussianDistribution.plotGaussian2D(
+            ax, 
+            self.mu_x[:2], self.sigma_x[:2,:2],
+            n_sigmas= 3, draw_all_sigma= False, draw_mu=False
+        )
 
-        self.pos_est.draw(ax)
+        Robot(Pose.from_array(self.mu_x), name="Estimate").draw(ax, r=0.3, linestyles=['--','--'])
 
+        for s, i in self.correspondence.items():
+            mu = self.get_mu_m_i(i)
+            GaussianDistribution.plotGaussian2D(
+                ax,
+                mu, self.get_sigma_m_i(i),
+                n_sigmas= 3, draw_all_sigma= False, draw_mu=False, color=lm_colors[s]
+            )
+
+            ax.add_patch(
+                plt.Circle((mu[0,0], mu[1,0]), .1, color=lm_colors[s], fill=False, linestyle='-', linewidth=2, label=f"$\\mu_{s}$")
+            )

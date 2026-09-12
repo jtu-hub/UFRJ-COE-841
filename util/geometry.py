@@ -107,7 +107,7 @@ class Pose:
 
     @property
     def as_array(self):
-        return np.array([float(self.x), float(self.y), float(self.th.rad)]).reshape((3,1))
+        return np.array([float(self.x), float(self.y), float(self.th.clip().rad)]).reshape((3,1))
     
     @staticmethod
     def from_array(pose_arr: np.array):

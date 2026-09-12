@@ -61,30 +61,33 @@ class Camera(RobotSensor):
 
         return DetectedFeature(r_rf, phi_rf, reading.s)
     
-    def detectLandmark(self, landmark: Landmark, detection_prob: bool = False, detection_noise: bool= True, std_meas_noise: float = 0.05, **kwargs) -> tuple[bool, float]:
+    def detectLandmark(self, landmark: Landmark, detection_prob: bool = False, detection_noise: bool = True, std_range_noise: float = 0.05, std_bearing_noise: float = np.deg2rad(1.0), **kwargs) -> tuple[bool, float, float]:
         dx, dy = landmark.pos.x - self.abs_pos.x, landmark.pos.y - self.abs_pos.y
 
         r = np.sqrt(dx**2 + dy**2)
         phi = Angle.atan2(dy, dx) - self.abs_pos.th
 
-        right = Angle(-(self.fov.rad / 2))
-        left  = Angle( (self.fov.rad / 2))
+        right = Angle(-self.fov.rad / 2)
+        left  = Angle( self.fov.rad / 2)
 
         if r < self.range and phi.is_between(right, left):
             d_phi1 = abs(phi - right)
             d_phi2 = abs(phi - left)
-            
+
+            # Probability of detection: 1 at center, linear fall-off
             p_detect = 1 - 0.25 * (d_phi1 + d_phi2) / self.fov.rad
-            
-            #probability of detection: 1 at center, linear fall off
-            is_detected = not detection_prob or np.random.random() < p_detect 
+            is_detected = not detection_prob or np.random.random() < p_detect
         else:
             is_detected = False
 
-        r_noisy = r + np.random.normal(0, std_meas_noise) if is_detected else None
-        phi_noisy = phi + Angle(np.random.normal(0, std_meas_noise / 10) / np.pi) if is_detected else None
+        if is_detected and detection_noise:
+            r_noisy = r + np.random.normal(0.0, std_range_noise)
+            phi_noisy = phi + Angle(np.random.normal(0.0, std_bearing_noise))
+        else:
+            r_noisy = r
+            phi_noisy = phi
 
-        return (is_detected, r_noisy, phi_noisy) if detection_noise else (is_detected, r, phi)
+        return is_detected, r_noisy, phi_noisy
 
     def getReading(self, m: LandmarkMap, std_meas_noise: float = 0.1, detection_prob: bool = False, detection_noise: bool= True, **kwargs) -> any:
         if isinstance(m, LandmarkMap):

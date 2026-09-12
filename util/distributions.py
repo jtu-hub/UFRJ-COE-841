@@ -58,18 +58,19 @@ class GaussianDistribution(ProbDistribution):
         s_yx = sigma[1][0]
 
         th = Angle(0.)
-        
-        if not np.isclose(s_xy, s_yx, rtol=1e-9, atol=1e-12):
-            raise ValueError(f"Assymetrical Standard Deviation Matrix\nSigma: {s_xx:.2f} {s_xy:.2f}\n       {s_yx:.2f} {s_yy:.2f}")
 
+        if not np.isclose(s_xy, s_yx, rtol=1e-3, atol=1e-4):
+            raise ValueError(f"Assymetrical Standard Deviation Matrix\nSigma: {s_xx:.8f} {s_xy:.8f}\n       {s_yx:.8f} {s_yy:.8f}")
+
+        sigma = (sigma + sigma.T) /2
         if s_xy != 0:
             #eigen value decomposition to find the dierction of the gaussian
             eig_val, eig_vec = np.linalg.eig(sigma)
 
             th = Angle.atan2(eig_vec[1][0], eig_vec[0][0])
 
-            s_xx = eig_val[0]
-            s_yy = eig_val[1]
+            s_xx = np.abs(eig_val[0])
+            s_yy = np.abs(eig_val[1])
 
         s_label = r"$\sigma$"
         m_label = r"$\mu$"
