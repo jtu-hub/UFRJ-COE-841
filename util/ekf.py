@@ -21,8 +21,6 @@ class EKFSlamKnownCorrespondences:
         self.sigma = np.zeros((self.dim_pos_est + self.n_lm * self.dim_m_est, self.dim_pos_est + self.n_lm * self.dim_m_est))
         self.r_mat = r_mat.copy()
         self.q_mat = q_mat.copy()
-        self.mu_acc    = np.zeros_like(self.mu)
-        self.sigma_acc = np.zeros_like(self.sigma)
 
     @property
     def mu_x(self):
@@ -268,10 +266,6 @@ class EKFSlamKnownCorrespondences:
         den = max(q, num_tol)
 
         return h_mat_x / den, h_mat_lm / den    
-
-    def resetAccumulatedAdjustments(self):
-        self.mu_acc    = np.zeros_like(self.mu)
-        self.sigma_acc = np.eye(self.mu.shape[0])
 
     def update(self, motion: CircularMotion | VelocityControl, detected_features: list[DetectedFeature] | None):
         self.updatePositionEstimate(motion)

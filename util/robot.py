@@ -19,10 +19,10 @@ class Robot(MotionModel):
         self.has_new_readings = False
         self.collisionAvoidance = collisionAvoidance
 
-    def applyControl(self, u: VelocityControl):
+    def applyControl(self, u: VelocityControl, **kwargs):
         if self.collisionAvoidance is not None and self.has_new_readings: u = self.collisionAvoidance(u)
 
-        self.pos, u_eff = u.applyControl(self.pos)
+        self.pos, u_eff = u.applyControl(self.pos,**kwargs)
         self.has_new_readings = False
 
         for sensor in self.sensors:

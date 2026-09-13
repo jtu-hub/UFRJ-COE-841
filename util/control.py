@@ -61,7 +61,7 @@ class VelocityControl(ControlInput):
     return VelocityControl(self.v, self.w, self.dt)
 
   
-  def applyControl(self, x0: Pose, motion_noise: bool = False, std_mot_noise: tuple[float, float] = (0.002, 0.001)) -> tuple[Pose, 'VelocityControl']:
+  def applyControl(self, x0: Pose, motion_noise: bool = False, std_mot_noise: tuple[float, float] = (0.2, 0.1)) -> tuple[Pose, 'VelocityControl']:
     if motion_noise:
         v_eff = self.v + np.random.normal(0, std_mot_noise[0])
         w_eff = self.w + np.random.normal(0, std_mot_noise[1])
