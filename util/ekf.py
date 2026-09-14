@@ -304,7 +304,7 @@ class EKFSlamKnownCorrespondences(EKFSlamBase):
             )
 
 class EKFSlamUnknownCorrespondences(EKFSlamBase):
-    def __init__(self, n_landmarks, r_mat=np.eye(3) * 0.001, q_mat=np.diag([0.5, 0.5, 0.1]), alpha = 1.5):
+    def __init__(self, n_landmarks, r_mat=np.eye(3) * 0.001, q_mat=np.diag([0.5, 0.5, 0.1]), alpha = 3):
         super().__init__(n_landmarks, r_mat, q_mat, dim_m_est=3, dim_pos_est=3)
 
         self.alpha = alpha
@@ -371,12 +371,13 @@ class EKFSlamUnknownCorrespondences(EKFSlamBase):
         pi_min = np.inf
 
         for i in range(self.n_lm_detected + 1):
-            delta = self.get_mu_m_i(i)[:2] - np.array([self.mu_x_x, self.mu_x_y]).reshape((2,1))
+            mu_k = self.get_mu_m_i(i)
+            delta = mu_k[:2] - np.array([self.mu_x_x, self.mu_x_y]).reshape((2,1))
             q = float(delta.T @ delta)
 
             r_hat   = np.sqrt(q)
             phi_hat = Angle.atan2(delta[1,0], delta[0,0]) - self.mu_x_th
-            z_hat = np.array([r_hat, phi_hat.rad, z.s]).reshape((3,1))
+            z_hat = np.array([r_hat, phi_hat.rad, mu_k[2,0]]).reshape((3,1))
 
             dz = (z.as_array - z_hat)
             dz[1,0] = Angle(dz[1,0]).clip().rad
