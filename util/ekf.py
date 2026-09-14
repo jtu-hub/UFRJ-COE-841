@@ -304,7 +304,7 @@ class EKFSlamKnownCorrespondences(EKFSlamBase):
             )
 
 class EKFSlamUnknownCorrespondences(EKFSlamBase):
-    def __init__(self, n_landmarks, r_mat=np.eye(3) * 0.001, q_mat=np.diag([0.5, 0.5, 0.1]), alpha = 2):
+    def __init__(self, n_landmarks, r_mat=np.eye(3) * 0.001, q_mat=np.diag([0.5, 0.5, 0.1]), alpha = 1.5):
         super().__init__(n_landmarks, r_mat, q_mat, dim_m_est=3, dim_pos_est=3)
 
         self.alpha = alpha
