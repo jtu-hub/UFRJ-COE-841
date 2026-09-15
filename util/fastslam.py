@@ -95,6 +95,7 @@ class FastSLAM:
         pose: Pose,
         motion,
         motion_noise: bool = True,
+        std_mot_noise: tuple[float, float] = (0.2, 0.1),
     ) -> Pose:
         """
         Sample a new pose using the project's existing motion model.
@@ -113,6 +114,8 @@ class FastSLAM:
         new_pose, _ = motion.applyControl(
             pose,
             motion_noise=motion_noise,
+            std_mot_noise=std_mot_noise,
+
         )
 
         return new_pose
@@ -479,6 +482,7 @@ class FastSLAM:
         motion,
         detected_features: list[DetectedFeature] | None,
         motion_noise: bool = True,
+        std_mot_noise: tuple[float, float] = (0.2, 0.1),
     ) -> dict:
         """
         Apply one FastSLAM update to a single particle.
@@ -487,6 +491,7 @@ class FastSLAM:
             particle.pose,
             motion,
             motion_noise=motion_noise,
+            std_mot_noise=std_mot_noise,
         )
 
         particle.associations = []
@@ -643,6 +648,7 @@ class FastSLAM:
         motion,
         detected_features: list[DetectedFeature] | None,
         motion_noise: bool = True,
+        std_mot_noise: tuple[float, float] = (0.2, 0.1),
         resample: bool = True,
     ) -> dict:
         """
@@ -669,6 +675,7 @@ class FastSLAM:
                 motion,
                 detected_features,
                 motion_noise=motion_noise,
+                std_mot_noise=std_mot_noise,
             )
 
             diagnostics["particle_diagnostics"].append(
