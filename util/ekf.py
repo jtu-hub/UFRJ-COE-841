@@ -9,14 +9,13 @@ from geometry import Angle, Pose
 from robot import Robot
 from distributions import GaussianDistribution
 
-class EKFSlamKnownCorrespondences:
-    def __init__(self, n_landmarks, r_mat = np.eye(3) * 0.001, q_mat = np.diag([0.5, 0.5])):
+class EKFSlamBase:
+    def __init__(self, n_landmarks, r_mat = np.eye(3) * 0.001, q_mat = np.diag([0.5, 0.5]), dim_m_est  = 2, dim_pos_est = 3):
         self.n_lm = n_landmarks
         self.n_lm_detected = 0
-        self.correspondence = {}
 
-        self.dim_m_est  = 2 # [mu_m_x, mu_m_y]
-        self.dim_pos_est = 3 # [mu_x, mu_y, mu_th]
+        self.dim_m_est   = dim_m_est    # [mu_m_x, mu_m_y]
+        self.dim_pos_est = dim_pos_est  # [mu_x, mu_y, mu_th]
         self.mu    = np.zeros((self.dim_pos_est + self.n_lm * self.dim_m_est,1))
         self.sigma = np.zeros((self.dim_pos_est + self.n_lm * self.dim_m_est, self.dim_pos_est + self.n_lm * self.dim_m_est))
         self.r_mat = r_mat.copy()
@@ -166,6 +165,12 @@ class EKFSlamKnownCorrespondences:
         self.sigma_x_m = g_sxm
         self.sigma_m_x = g_sxm.T
         #sigma_m_m stays invariant in the position update
+        
+class EKFSlamKnownCorrespondences(EKFSlamBase):
+    def __init__(self, n_landmarks, r_mat=np.eye(3) * 0.001, q_mat=np.diag([0.5, 0.5])):
+        super().__init__(n_landmarks, r_mat, q_mat, dim_m_est=2, dim_pos_est=3)
+
+        self.correspondence = {}
 
     def h_mat_init(self, r, alpha):
         #alpha being the absolute angle of r, usually mu_x_th + z.phi
@@ -183,7 +188,11 @@ class EKFSlamKnownCorrespondences:
 
     def initializeNewLandmark(self, z: DetectedFeature):
         if self.n_lm_detected >= self.n_lm:
-            warnings.warn(f"Detcted feature will be ignored!\n---> Detected a new feature {z} when all {self.n_lm} available landmark estimates are already allocated to another landmark")
+            warnings.warn(
+                f"Detcted feature will be ignored!"
+                f"\n---> Detected a new feature {z} when all {self.n_lm} available landmark estimates are already"
+                f" allocated to another landmark"
+            )
             return False
             
         self.correspondence[z.s] = self.n_lm_detected
@@ -251,7 +260,6 @@ class EKFSlamKnownCorrespondences:
         self.sigma = s_corr @ self.sigma
         self.sigma = (self.sigma + self.sigma.T) / 2
 
-
     def h_mat(self, dx, dy, q, r, num_tol=1e-6):
         h_mat_x = np.array([
             [-r * dx, -r * dy,  0],
@@ -293,4 +301,186 @@ class EKFSlamKnownCorrespondences:
 
             ax.add_patch(
                 plt.Circle((mu[0,0], mu[1,0]), .1, color=lm_colors[s], fill=False, linestyle='-', linewidth=2, label=f"$\\mu_{s}$")
+            )
+
+class EKFSlamUnknownCorrespondences(EKFSlamBase):
+    def __init__(self, n_landmarks, r_mat=np.eye(3) * 0.001, q_mat=np.diag([0.5, 0.5, 0.1]), alpha = 3):
+        super().__init__(n_landmarks, r_mat, q_mat, dim_m_est=3, dim_pos_est=3)
+
+        self.alpha = alpha
+        self.mu_m_new    = np.zeros((self.dim_m_est, 1))
+        self.sigma_m_new = np.zeros((self.dim_m_est, self.dim_m_est))
+
+    def get_mu_m_i(self, idx):
+        if idx >= self.n_lm_detected:
+            return self.mu_m_new.copy()
+        else:
+            return super().get_mu_m_i(idx)
+        
+    def get_sigma_m_i(self, idx):
+        if idx >= self.n_lm_detected:
+            return self.sigma_m_new.copy()
+        else:
+            return super().get_sigma_m_i(idx)
+
+    def get_sigma_m_i_x(self, idx):
+        if idx >= self.n_lm_detected:
+            return np.zeros((self.dim_m_est, self.dim_pos_est))
+        else:
+            return super().get_sigma_m_i_x(idx)
+
+    def get_sigma_x_m_i(self, idx):
+        if idx >= self.n_lm_detected:
+            return np.zeros((self.dim_pos_est, self.dim_m_est))
+        else:
+            return super().get_sigma_x_m_i(idx)
+
+    def h_mat_init(self, r, alpha):
+        #alpha being the absolute angle of r, usually mu_x_th + z.phi
+        h_mat_x_init = np.array([
+            [1, 0, -r * alpha.sin],
+            [0, 1,  r * alpha.cos],
+            [0, 0,              0]
+        ])
+
+        h_mat_m_init = np.array([
+            [alpha.cos, -r * alpha.sin, 0],
+            [alpha.sin,  r * alpha.cos, 0],
+            [        0,              0, 1]
+        ])
+
+        return h_mat_x_init, h_mat_m_init
+
+    def initializeNewLandmark(self, z: DetectedFeature):
+        mu_m_init = np.array([
+            self.mu_x_x + z.dx(self.mu_x_th), 
+            self.mu_x_y + z.dy(self.mu_x_th),
+            z.s
+        ]).reshape((3,1))
+
+        h_mat_x_init, h_mat_m_init = self.h_mat_init(z.r, z.phi + self.mu_x_th)
+        sigma_m_init = h_mat_x_init @ self.sigma_x @ h_mat_x_init.T + h_mat_m_init @ self.q_mat @ h_mat_m_init.T
+        sigma_m_init = (sigma_m_init + sigma_m_init.T) / 2
+
+        self.mu_m_new    = mu_m_init
+        self.sigma_m_new = sigma_m_init
+
+    def updateLandmarkEstimates(self, z: DetectedFeature):
+        self.initializeNewLandmark(z)
+
+        pi_min = np.inf
+
+        for i in range(self.n_lm_detected + 1):
+            mu_k = self.get_mu_m_i(i)
+            delta = mu_k[:2] - np.array([self.mu_x_x, self.mu_x_y]).reshape((2,1))
+            q = float(delta.T @ delta)
+
+            r_hat   = np.sqrt(q)
+            phi_hat = Angle.atan2(delta[1,0], delta[0,0]) - self.mu_x_th
+            z_hat = np.array([r_hat, phi_hat.rad, mu_k[2,0]]).reshape((3,1))
+
+            dz = (z.as_array - z_hat)
+            dz[1,0] = Angle(dz[1,0]).clip().rad
+
+            h_mat_x, h_mat_m = self.h_mat(delta[0,0].copy(), delta[1,0].copy(), q, r_hat)
+
+            # Note: hsh == \Psi in the reference algorithm
+            hsh = (
+                h_mat_x @ self.sigma_x            @ h_mat_x.T +
+                h_mat_m @ self.get_sigma_m_i_x(i) @ h_mat_x.T + #TODO: can be optimized, the term below is the transpose of this one
+                h_mat_x @ self.get_sigma_x_m_i(i) @ h_mat_m.T + 
+                h_mat_m @ self.get_sigma_m_i(i)   @ h_mat_m.T +
+                self.q_mat
+            )
+
+            psi_inv = np.linalg.solve(hsh, np.eye(hsh.shape[0]))
+            pi = float(dz.T @ psi_inv @ dz) if i < self.n_lm_detected else self.alpha
+
+            if pi <= pi_min:
+                pi_min      = pi
+                i_min       = i
+                h_mat_x_min = h_mat_x.copy()
+                h_mat_m_min = h_mat_m.copy()
+                psi_inv_min = psi_inv.copy()
+                dz_min      = dz.copy()
+
+        if i_min == self.n_lm_detected and self.n_lm_detected >= self.n_lm:
+            warnings.warn(
+                f"Detcted feature will be ignored!"
+                f"\n---> Detected a new feature {z} when all {self.n_lm} available landmark estimates are already"
+                f" allocated to another landmark"
+            )
+            return
+        elif i_min == self.n_lm_detected:
+            self.set_mu_m_i(self.n_lm_detected, self.mu_m_new)
+            self.set_sigma_m_i(self.n_lm_detected, self.sigma_m_new)
+            self.n_lm_detected += 1
+       
+        # sh = [sh_x, sh_0, ...sh_N]^T, 
+        # - sh_x = sigma_xx     @ h_x.T + sigma_x{m_i}     @ h_m.T; 
+        # - sh_k = sigma_{m_k}x @ h_x.T + sigma_{m_k}{m_i} @ h_m.T; for k \in {0, ..., N-1}
+        i_start = self.dim_pos_est + i_min * self.dim_m_est
+        sh = (
+            self.sigma[:, :self.dim_pos_est]               @ h_mat_x_min.T + #[sigma_xx     sigma_{m_k}x    ].T @ h_mat_x.T
+            self.sigma[:, i_start: i_start+self.dim_m_est] @ h_mat_m_min.T   #[sigma_x{m_i} sigma_{m_k}{m_i}].T @ h_mat_m.T
+        )
+
+        k = sh @ psi_inv_min
+        k_hx = k @ h_mat_x_min
+        k_hm = k @ h_mat_m_min
+
+        mu_corr = k @ dz_min
+
+        s_corr  = np.eye(self.mu.shape[0])
+        s_corr[:, :self.dim_pos_est]               -= k_hx
+        s_corr[:, i_start: i_start+self.dim_m_est] -= k_hm
+
+        self.sigma = s_corr @ self.sigma
+        self.sigma = (self.sigma + self.sigma.T) / 2
+
+        self.mu += mu_corr
+
+    def h_mat(self, dx, dy, q, r, num_tol=1e-6):
+        h_mat_x = np.array([
+            [-r * dx, -r * dy,  0],
+            [   dy  ,   -dx  , -q],
+            [   0   ,    0   ,  0]
+        ])
+
+        h_mat_lm = np.array([
+            [r * dx, r * dy, 0],
+            [ -dy  ,   dx  , 0],
+            [  0   ,   0   , q]
+        ])
+
+        den = max(q, num_tol)
+
+        return h_mat_x / den, h_mat_lm / den    
+
+    def update(self, motion: CircularMotion | VelocityControl, detected_features: list[DetectedFeature] | None):
+        self.updatePositionEstimate(motion)
+
+        if detected_features:
+            for feature in detected_features:
+                self.updateLandmarkEstimates(feature)
+
+    def draw(self, ax: plt.Axes, lm_colors, **kwargs):
+        GaussianDistribution.plotGaussian2D(
+            ax, 
+            self.mu_x[:2], self.sigma_x[:2,:2],
+            n_sigmas= 3, draw_all_sigma= False, draw_mu=False
+        )
+
+        Robot(Pose.from_array(self.mu_x), name="Estimate").draw(ax, r=0.3, linestyles=['--','--'])
+
+        for i in range(self.n_lm_detected):
+            mu = self.get_mu_m_i(i)[:2]
+            GaussianDistribution.plotGaussian2D(
+                ax,
+                mu, self.get_sigma_m_i(i)[:2,:2],
+                n_sigmas= 3, draw_all_sigma= False, draw_mu=False, color="#2dcab0"
+            )
+
+            ax.add_patch(
+                plt.Circle((mu[0,0], mu[1,0]), .1, color="#2dcab0", fill=False, linestyle='-', linewidth=2, label=f"$\\mu_{i}$")
             )
