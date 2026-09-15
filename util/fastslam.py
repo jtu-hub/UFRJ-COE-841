@@ -80,7 +80,7 @@ class FastSLAM:
         """Initialize all particles at the supplied initial pose."""
         self.particles = [
             Particle(
-                pose=pose.copy(),
+                pose=Pose(pose.x, pose.y, pose.th),
                 weight=1.0 / self.n_particles,
             )
             for _ in range(self.n_particles)
@@ -145,7 +145,7 @@ class FastSLAM:
             dtype=float,
         ).reshape(2, 1)
 
-        q = float(delta.T @ delta)
+        q = float((delta.T @ delta).item())
 
         if np.isclose(q, 0.0):
             raise ValueError(
@@ -259,13 +259,17 @@ class FastSLAM:
                 innovation_cov,
                 innovation,
             )
+
             mahalanobis_sq = float(
-                innovation.T @ solved
+                (innovation.T @ solved).item()
             )
 
             sign, logdet = np.linalg.slogdet(
                 innovation_cov
             )
+
+            sign = float(np.asarray(sign).item())
+            logdet = float(np.asarray(logdet).item())
 
             if sign <= 0:
                 return 0.0, z_hat, innovation_cov
