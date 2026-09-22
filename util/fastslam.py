@@ -324,16 +324,9 @@ class FastSLAM:
             predictions[idx] = z_hat
             innovation_covariances[idx] = psi
 
-        new_landmark_idx = (
-            max(particle.landmarks.keys(), default=-1) + 1
-        )
-
+        new_landmark_idx = (max(particle.landmarks.keys(), default=-1) + 1)
         likelihoods[new_landmark_idx] = self.p0
-
-        best_idx = max(
-            likelihoods,
-            key=likelihoods.get,
-        )
+        best_idx = max(likelihoods, key=likelihoods.get)
 
         diagnostics = {
             "likelihoods": likelihoods,
@@ -613,7 +606,6 @@ class FastSLAM:
     def resample(self) -> np.ndarray:
         """
         Resample particles according to their normalized weights.
-
         Returns the selected indices, useful for notebook diagnostics.
         """
         weights = self.normalized_weights()
@@ -626,18 +618,12 @@ class FastSLAM:
         )
 
         old_particles = self.particles
-
         self.particles = [
             deepcopy(old_particles[idx])
             for idx in indices
         ]
 
-        uniform_weight = 1.0 / self.n_particles
-
-        for particle in self.particles:
-            particle.weight = uniform_weight
-
-        return indices
+ 
 
     # ------------------------------------------------------------------
     # Full FastSLAM update
