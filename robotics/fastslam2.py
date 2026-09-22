@@ -29,10 +29,7 @@ class FastSLAM2(FastSLAM):
     unchanged from :class:`.fastslam.FastSLAM`.
     """
 
-    # ------------------------------------------------------------------
     # Extra Jacobian needed for the improved proposal
-    # ------------------------------------------------------------------
-
     @staticmethod
     def pose_jacobian(
         delta: np.ndarray,
