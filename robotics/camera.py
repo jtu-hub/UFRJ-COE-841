@@ -47,17 +47,17 @@ class Camera(RobotSensor):
         self.range = sensor_range
 
     def readingToRobotFrame(self, reading: DetectedFeature):
-        x_s, y_s, th_s = self.abs_pos.x, self.abs_pos.y, self.abs_pos.th
-        x_r, y_r, th_r = self.robot_pose.x, self.robot_pose.y, self.robot_pose.th
-        r_sf, phi_sf = reading.r, reading.phi
+        x_s, y_s, th_s = self.abs_pos.x, self.abs_pos.y, self.abs_pos.th # sensor position in the world frame
+        x_r, y_r, th_r = self.robot_pose.x, self.robot_pose.y, self.robot_pose.th # robot position in the world frame
+        r_sf, phi_sf = reading.r, reading.phi # feature position in the sensor frame
 
-        x_f = x_s + r_sf * (th_s + phi_sf).cos
-        y_f = y_s + r_sf * (th_s + phi_sf).sin
+        x_f = x_s + r_sf * (th_s + phi_sf).cos # feature position in the world frame
+        y_f = y_s + r_sf * (th_s + phi_sf).sin # feature position in the world frame
 
         dx = x_f - x_r
         dy = y_f - y_r
-        r_rf = np.hypot(dx, dy)
-        phi_rf = Angle.atan2(dy, dx) - th_r
+        r_rf = np.hypot(dx, dy) # feature position in the robot frame
+        phi_rf = Angle.atan2(dy, dx) - th_r # feature position in the robot frame
 
         return DetectedFeature(r_rf, phi_rf, reading.s)
     
@@ -100,6 +100,7 @@ class Camera(RobotSensor):
             
                 if is_in_fov:
                     correspondences.append(c)
+                    # Add the detected landmark in the robot frame from the sensor frame reading
                     detected_landmarks.append(
                         self.readingToRobotFrame(DetectedFeature(r, phi, l.signature))
                     )

@@ -26,7 +26,7 @@ class Robot(MotionModel):
         self.has_new_readings = False
 
         for sensor in self.sensors:
-            sensor.updatePosition(self.pos)
+            sensor.updatePosition(self.pos) # we are considering that the sensor is in the center of the robot, so it moves with the robot
 
         return u_eff
 
