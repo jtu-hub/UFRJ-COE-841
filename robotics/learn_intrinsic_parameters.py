@@ -2,7 +2,7 @@ import numpy as np
 
 from .geometry import Pose, Angle
 
-from beam_range_finder import (
+from .beam_range_finder import (
     p_hit,
     p_short,
     p_max,

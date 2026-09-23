@@ -1,5 +1,5 @@
 import numpy as np
-from maps import DistanceField
+from .maps import DistanceField
 
 
 # ============================================================
